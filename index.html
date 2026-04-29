@@ -347,9 +347,6 @@ input,textarea,select{font-family:inherit;outline:none;background:none;color:var
 .todo-item.today{border-left-color:var(--accent)}
 .todo-item.tomorrow{border-left-color:#aaa}
 .todo-item.done-item{opacity:0.4}
-.todo-cb{width:18px;height:18px;border:1.5px solid var(--border2);border-radius:50%;flex-shrink:0;cursor:pointer;margin-top:2px;transition:all var(--tr)}
-.todo-cb:hover{border-color:var(--accent)}
-.todo-cb.checked{background:var(--accent);border-color:var(--accent)}
 .todo-body{flex:1;min-width:0}
 .todo-text{font-size:15px;color:var(--text);line-height:var(--lh-body);font-weight:500}
 .todo-text.strikethrough{text-decoration:line-through;color:var(--text3)}
@@ -440,9 +437,6 @@ input,textarea,select{font-family:inherit;outline:none;background:none;color:var
 .m-select:focus{border-color:var(--accent);outline:none;box-shadow:var(--ring)}
 .m-checklist{display:flex;flex-direction:column;gap:4px}
 .m-cl-item{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--card);border-radius:var(--radius-sm);min-height:44px}
-.m-cl-cb{width:20px;height:20px;border:1.5px solid var(--border2);border-radius:50%;flex-shrink:0;cursor:pointer;transition:all var(--tr)}
-.m-cl-cb:hover{border-color:var(--accent)}
-.m-cl-cb.checked{background:var(--accent);border-color:var(--accent)}
 .m-cl-text{flex:1;font-size:12px;color:var(--text)}
 .m-cl-text.done{text-decoration:line-through;color:var(--text3)}
 .m-cl-del{font-size:13px;color:var(--text3);cursor:pointer;opacity:0.5;transition:all var(--tr)}
@@ -826,7 +820,6 @@ select.if-input{cursor:pointer}
 .btn-accent:active{transform:scale(0.97)}
 .btn-green:active{transform:scale(0.97)}
 .k-card:active{transform:scale(0.98)}
-.todo-cb.checked{animation:popIn 0.18s ease}
 .nav-count{animation:pulse-accent 2.5s ease-in-out 2}
 .modal-box{animation:popIn 0.2s cubic-bezier(0.34,1.56,0.64,1)}
 .stat-badge-pulse{animation:pulse-accent 2s ease-in-out 3}
@@ -1301,10 +1294,17 @@ html.dark .reco-tab:not(.active) { background: var(--surface) !important; color:
 .tp-item.overdue{border-left:3px solid #e65c5c}
 .tp-item.today{border-left:3px solid var(--accent)}
 .tp-item.assigned-to-me{border-left:3px solid #3b82f6}
-.tp-cb{width:18px;height:18px;border:2px solid var(--border2);border-radius:var(--radius-tiny);flex-shrink:0;cursor:pointer;margin-top:1px;transition:all var(--tr-fast);display:flex;align-items:center;justify-content:center}
-.tp-cb:hover{border-color:var(--accent)}
-.tp-cb.checked{background:var(--accent);border-color:var(--accent)}
-.tp-cb.checked::after{content:'✓';font-size:11px;color:#0a1a00;font-weight:700}
+/* Checkbox-Component — Muster 38 fünfte Instanz */
+.cb{width:var(--cb-size,18px);height:var(--cb-size,18px);border:var(--cb-border,2px) solid var(--border2);border-radius:var(--cb-radius,var(--radius-tiny));flex-shrink:0;cursor:pointer;transition:all var(--tr-fast);display:flex;align-items:center;justify-content:center}
+.cb:hover{border-color:var(--accent)}
+.cb.checked{background:var(--accent);border-color:var(--accent)}
+.cb.checked::after{content:var(--cb-check,'');font-size:11px;color:#0a1a00;font-weight:700}
+.cb--circle{--cb-radius:50%}
+.cb--square{--cb-radius:var(--radius-tiny)}
+.cb--lg{--cb-size:20px}
+.cb--thin{--cb-border:1.5px}
+.cb--check{--cb-check:'✓'}
+.cb--anim.checked{animation:popIn 0.18s ease}
 .tp-item-content{flex:1;min-width:0}
 .tp-item-text{font-size:13px;font-weight:500;color:var(--text);line-height:var(--lh-body)}
 .tp-item-text.done{text-decoration:line-through;color:var(--text3)}
@@ -2611,8 +2611,20 @@ async function dbSaveServiceItem(item){
   }
 }
 async function dbDeleteServiceItem(id){
-  try{await db.from('service_items').delete().eq('id',id);}
-  catch(e){addToPendingQueue({type:'delete',table:'service_items',id});}
+  try{
+    const{error,data:rows}=await db.from('service_items').delete().eq('id',id).select();
+    if(error)throw error;
+    if(!rows||rows.length===0){
+      console.warn('[Service] DELETE 0 Zeilen — RLS-Block oder ID nicht gefunden:',id);
+      throw new Error('DELETE blockiert (0 Zeilen) — RLS oder ID fehlt');
+    }
+    console.log('[Service] DELETE erfolgreich:',id);
+    return true;
+  }catch(e){
+    console.warn('[Service] dbDeleteServiceItem fehlgeschlagen:',e?.message||e);
+    addToPendingQueue({type:'delete',table:'service_items',id});
+    throw e;
+  }
 }
 
 /* ── WP RANKING ── */
@@ -3214,7 +3226,7 @@ function renderTodos(){
       const isAssignedOut=it.assigned_to&&it.assigned_to!==myName;
       const isAssignedIn=it.assigned_by&&it.assigned_by!==myName;
       return '<div class="tp-item '+(over?'overdue':isT2?'today':'')+(isAssignedIn?' assigned-to-me':'')+'" style="cursor:pointer" onclick="openTodoEdit(\''+it.id+'\',event)">'+
-        '<div class="tp-cb'+(it.done?' checked':'')+'" onclick="event.stopPropagation();toggleTodoDone(\''+it.id+'\')"></div>'+
+        '<div class="cb cb--check cb--anim'+(it.done?' checked':'')+'" style="margin-top:1px" onclick="event.stopPropagation();toggleTodoDone(\''+it.id+'\')"></div>'+
         '<div class="tp-item-content">'+
           '<div class="tp-item-text'+(it.done?' done':'')+'">'+esc(it.text)+'</div>'+
           '<div class="tp-item-meta">'+
@@ -3808,7 +3820,7 @@ function renderCardTimeline(card){
     </div>`;
   }).join('');
 }
-function renderModalChecklist(cl){document.getElementById('cm-checklist').innerHTML=cl.map((item,i)=>`<div class="m-cl-item"><div class="m-cl-cb${item.checked?' checked':''}" onclick="toggleModalCL(${i})"></div><span class="m-cl-text${item.checked?' done':''}">${esc(item.text)}</span><span class="m-cl-del" onclick="deleteModalCL(${i})">×</span></div>`).join('');}
+function renderModalChecklist(cl){document.getElementById('cm-checklist').innerHTML=cl.map((item,i)=>`<div class="m-cl-item"><div class="cb cb--circle cb--lg cb--thin${item.checked?' checked':''}" onclick="toggleModalCL(${i})"></div><span class="m-cl-text${item.checked?' done':''}">${esc(item.text)}</span><span class="m-cl-del" onclick="deleteModalCL(${i})">×</span></div>`).join('');}
 function getModalCard(){for(const col in pipeline){const c=(pipeline[col]||[]).find(x=>x.id===modalCardId);if(c)return c;}return null;}
 function toggleModalCL(i){const c=getModalCard();if(!c)return;c.checklist[i].checked=!c.checklist[i].checked;save('pipeline_'+(currentUser?.id||'local'),pipeline);dbSavePipelineCard(c,modalColId);renderModalChecklist(c.checklist);renderPipeline();}
 function deleteModalCL(i){const c=getModalCard();if(!c)return;c.checklist.splice(i,1);save('pipeline_'+(currentUser?.id||'local'),pipeline);dbSavePipelineCard(c,modalColId);renderModalChecklist(c.checklist);}
@@ -4672,7 +4684,18 @@ async function deleteWaItem(id){
   const data=waKanbanData();let removedCard=null,removedCol=null;
   for(const col in data){const idx=(data[col]||[]).findIndex(w=>w.id===id);if(idx>=0){removedCard=data[col][idx];removedCol=col;data[col].splice(idx,1);break;}}
   if(!removedCard)return;_pendingDeletes.add(id);saveWaKanban(data);renderWaQueue();updateNavCounts();
-  _undoDbTimer=setTimeout(()=>{dbDeleteServiceItem(id).finally(()=>_pendingDeletes.delete(id));},5200);
+  _undoDbTimer=setTimeout(()=>{
+    dbDeleteServiceItem(id)
+      .catch(()=>{
+        // DB-Delete fehlgeschlagen (RLS/offline) — Karte lokal wiederherstellen
+        const d=waKanbanData();
+        if(!d[removedCol])d[removedCol]=[];
+        if(!d[removedCol].some(x=>x.id===id))d[removedCol].unshift(removedCard);
+        saveWaKanban(d);renderWaQueue();updateNavCounts();
+        showToast('⚠️ Löschen fehlgeschlagen — keine Berechtigung?');
+      })
+      .finally(()=>_pendingDeletes.delete(id));
+  },5200);
   showToast('Anliegen gelöscht',()=>{_pendingDeletes.delete(id);if(_undoDbTimer){clearTimeout(_undoDbTimer);_undoDbTimer=null;}const d=waKanbanData();if(!d[removedCol])d[removedCol]=[];d[removedCol].unshift(removedCard);saveWaKanban(d);dbSaveServiceItem(removedCard);renderWaQueue();updateNavCounts();showToast('Wiederhergestellt');});
 }
 function reopenWaItem(id){
@@ -4859,7 +4882,18 @@ async function deleteServiceItem(){
   const data=waKanbanData();let removedCard=null,removedCol=null;
   for(const col in data){const idx=(data[col]||[]).findIndex(w=>w.id===id);if(idx>=0){removedCard=data[col][idx];removedCol=col;data[col].splice(idx,1);break;}}
   if(!removedCard)return;_pendingDeletes.add(id);saveWaKanban(data);renderWaQueue();updateNavCounts();
-  _undoDbTimer=setTimeout(()=>{dbDeleteServiceItem(id).finally(()=>_pendingDeletes.delete(id));},5200);
+  _undoDbTimer=setTimeout(()=>{
+    dbDeleteServiceItem(id)
+      .catch(()=>{
+        // DB-Delete fehlgeschlagen (RLS/offline) — Karte lokal wiederherstellen
+        const d=waKanbanData();
+        if(!d[removedCol])d[removedCol]=[];
+        if(!d[removedCol].some(x=>x.id===id))d[removedCol].unshift(removedCard);
+        saveWaKanban(d);renderWaQueue();updateNavCounts();
+        showToast('⚠️ Löschen fehlgeschlagen — keine Berechtigung?');
+      })
+      .finally(()=>_pendingDeletes.delete(id));
+  },5200);
   showToast('Anliegen gelöscht',()=>{_pendingDeletes.delete(id);if(_undoDbTimer){clearTimeout(_undoDbTimer);_undoDbTimer=null;}const d=waKanbanData();if(!d[removedCol])d[removedCol]=[];d[removedCol].unshift(removedCard);saveWaKanban(d);dbSaveServiceItem(removedCard);renderWaQueue();updateNavCounts();showToast('Wiederhergestellt');});
 }
 function closeServiceModal(){releaseFocus();document.getElementById('service-modal').classList.remove('active');serviceModalId=null;serviceModalCol=null;servicePendingFile=null;}
@@ -5074,7 +5108,7 @@ function openRecModal(cardId,colId){
   renderRecModalChecklist(card.checklist||[]);
   const _rmEl=document.getElementById('rec-modal');_rmEl.classList.add('active');trapFocus(_rmEl);
 }
-function renderRecModalChecklist(cl){document.getElementById('rm-checklist').innerHTML=cl.map((item,i)=>`<div class="m-cl-item"><div class="m-cl-cb${item.checked?' checked':''}" onclick="toggleRecModalCL(${i})"></div><span class="m-cl-text${item.checked?' done':''}">${esc(item.text)}</span></div>`).join('');}
+function renderRecModalChecklist(cl){document.getElementById('rm-checklist').innerHTML=cl.map((item,i)=>`<div class="m-cl-item"><div class="cb cb--circle cb--lg cb--thin${item.checked?' checked':''}" onclick="toggleRecModalCL(${i})"></div><span class="m-cl-text${item.checked?' done':''}">${esc(item.text)}</span></div>`).join('');}
 function getRecModalCard(){for(const col in recruiting){const c=(recruiting[col]||[]).find(x=>x.id===recModalId);if(c)return c;}return null;}
 function toggleRecModalCL(i){const c=getRecModalCard();if(!c)return;c.checklist[i].checked=!c.checklist[i].checked;save('recruiting',recruiting);dbSaveRecruitingCard(c,recModalColId);renderRecModalChecklist(c.checklist);renderRecruiting();}
 function saveRecModal(){

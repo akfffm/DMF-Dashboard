@@ -1,0 +1,16 @@
+# Backups die Claude während Bug-Fix-Runs anlegt
+*.bak
+*.bak.*
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# Lokale Test-Files
+check.js
+preview-test*.html
